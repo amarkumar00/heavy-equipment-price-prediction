@@ -1,0 +1,31 @@
+name: Notebook check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate notebook JSON and metadata
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("notebooks/heavy_equipment_price_prediction.ipynb")
+          notebook = json.loads(path.read_text(encoding="utf-8"))
+
+          assert notebook["nbformat"] == 4
+          assert notebook["cells"], "Notebook must contain cells"
+          assert all(cell.get("cell_type") in {"markdown", "code", "raw"} for cell in notebook["cells"])
+          assert not any(cell.get("outputs") for cell in notebook["cells"]), "Portfolio notebook must not embed outputs"
+
+          print(f"Validated {path} with {len(notebook['cells'])} cells")
+          PY
