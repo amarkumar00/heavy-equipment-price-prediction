@@ -57,6 +57,7 @@ The competition dataset is intentionally not committed because access and redist
 
 ## Links
 
+- [View the public notebook on Kaggle](https://www.kaggle.com/code/amar23f2000465/heavy-equipment-price-prediction-portfolio)
 - [Kaggle profile](https://www.kaggle.com/amar23f2000465)
 - [Competition page](https://www.kaggle.com/competitions/heavy-equipment-selling-price-prediction-challenge)
 - [GitHub profile](https://github.com/amarkumar00)
