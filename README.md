@@ -1,9 +1,9 @@
 # EquipValue: Heavy Equipment Price Intelligence
 
 EquipValue is a student-friendly decision-support project for estimating the
-selling price of used heavy equipment from auction, age, usage, location, and
-technical attributes. It extends an IIT Madras/Kaggle competition solution into
-a reproducible Python, SQLite, and R analysis pipeline.
+selling price of used heavy equipment from auction date, age, usage, location,
+and technical attributes. It extends an IIT Madras/Kaggle competition solution
+into a reproducible Python, SQLite, R, classical-ML, and PyTorch pipeline.
 
 The original competition notebook is preserved at
 `notebooks/original_competition_solution.ipynb`. The refactor does not overwrite
@@ -21,9 +21,9 @@ using the project in an interview.
 ## Problem statement
 
 Buyers, sellers, and auction teams need a consistent starting point for valuing
-used equipment. This project cleans historical auction records, analyses price
-drivers, compares model-ready features, and prepares the repository for later
-machine-learning, PyTorch, and deployment milestones.
+used equipment. EquipValue cleans historical auction records, analyses price
+drivers, compares models on genuinely later auctions, and identifies the kinds
+of records on which predictions are less reliable.
 
 The system is decision support, not a certified appraisal. Statistical
 association is not described as causation, and predicted prices must not replace
@@ -36,43 +36,92 @@ physical inspection or expert judgement.
 - Equipment age and operational usage create understandable feature-engineering
   and data-quality questions.
 - SQL answers business questions, R provides transparent statistical evidence,
-  and Python supports a reproducible modelling pipeline.
+  Python supports reproducible modelling, and PyTorch tests whether a small
+  neural network actually adds value.
 - The author has already studied the original notebook, making the extension
   explainable in an interview instead of being a keyword-only rewrite.
 
-## Current milestone scope
+## Implemented milestones
 
-### Milestone 1: repository and data contract
+### 1-4: data, SQL, and R foundation
 
-- Preserves the original competition notebook.
-- Documents the authorised local dataset layout.
-- Excludes raw, processed, database, report, and model artifacts from Git.
-- Provides actionable errors when data is missing.
+- Preserves the original competition notebook and keeps access-controlled data
+  out of Git.
+- Cleans dates, targets, manufacture years, operational hours, duplicates, and
+  missing values in `src/clean_data.py`.
+- Builds normalized SQLite tables and answers six business questions with SQL.
+- Uses base R for descriptive statistics, correlations, a small log-price
+  regression, group comparisons, and visual diagnostics.
 
-### Milestone 2: reproducible cleaning
+### 5: leakage-safe Python features
 
-`src/clean_data.py` parses transaction dates, removes exact duplicates, reports
-duplicate identifiers, excludes invalid training targets, treats impossible
-manufacture years as missing, inspects operational hours, creates model-ready
-features, and writes a JSON data-quality report.
+`src/features.py` creates sale date, equipment age, log-hours, hours-per-year,
+missingness, utilization, scale, description-length, and category-frequency
+features. Frequency mappings are fitted separately inside each training fold;
+an unseen validation category receives frequency zero.
 
-### Milestone 3: SQLite business analysis
+### 6: proper time validation
 
-`src/build_database.py` normalizes cleaned rows into `equipment_attributes` and
-`equipment_transactions`. The SQL analysis answers:
+`src/validation.py` sorts unique transaction dates and creates three expanding
+windows. Every validation auction is later than its training data, and all rows
+from the same date remain together. A separate AssetID report shows whether a
+repeated machine appeared in training, so repeated equipment cannot silently
+inflate the headline score.
 
-1. How does average price vary by equipment age?
-2. Which equipment categories have the highest median price?
-3. How does average price vary by region?
-4. How do utilization tiers compare?
-5. How does price vary across operational-hour bands?
-6. Which categories contain the most transactions?
+### 7: classical model comparison
 
-### Milestone 4: R statistical analysis
+`src/train_classical_models.py` evaluates a median baseline, Ridge Regression,
+Decision Tree, and LightGBM on the same features and folds. Models learn
+`log1p(price)` and are compared with RMSLE, MAE, RMSE, and R-squared. LightGBM is
+then retrained on all authorised history and saved with its fitted preprocessing
+artifacts.
 
-The package-free base-R script calculates descriptive statistics, correlations,
-group summaries, a small log-price regression, and three visual reports. Its
-outputs explicitly describe associations rather than causal effects.
+### 8: simple PyTorch deep learning
+
+`src/train_pytorch.py` implements:
+
+```text
+Input -> Dense 128 + ReLU -> Dropout -> Dense 64 + ReLU -> Dense 1
+```
+
+Numeric features are scaled, categorical features are encoded, and log-price is
+standardized with training-fold statistics. Early stopping monitors untouched
+future rows. A typical best epoch count from cross-validation is used to retrain
+the saved MLP on all authorised history.
+
+### 9: error and model analysis
+
+`src/analyze_errors.py` compares matching out-of-fold LightGBM and PyTorch
+predictions for equipment age, observed price band, region, category, missing
+hours, and previously seen versus unseen machines. These are descriptive failure
+patterns, not proven root causes or causal effects.
+
+## Verified local results
+
+The complete 138,701-row authorised training file was used. Three expanding
+time folds produced the following mean validation results:
+
+| Model | Mean RMSLE | Mean MAE | Mean RMSE | Mean R-squared |
+| --- | ---: | ---: | ---: | ---: |
+| LightGBM | **0.3493** | **10,478** | **14,576** | **0.688** |
+| PyTorch MLP | 0.3840 | 12,077 | 16,835 | 0.583 |
+| Ridge Regression | 0.4284 | 13,507 | 21,056 | 0.349 |
+| Decision Tree | 0.4359 | 12,801 | 17,720 | 0.540 |
+| Median baseline | 0.6734 | 20,669 | 26,709 | -0.039 |
+
+On the 129,968 rows for which both strong models have matching out-of-fold
+predictions, LightGBM RMSLE is 0.3359 and PyTorch RMSLE is 0.3849. This is a
+useful negative result: for this tabular dataset, the small neural network is
+valid but does not beat gradient-boosted trees.
+
+Only 2.9%-4.4% of validation rows across the three folds contained an AssetID
+already seen in training. LightGBM scored similarly on seen and unseen machines
+(0.3360 versus 0.3359 RMSLE), so repeated assets did not explain its overall
+result. Missing/unknown equipment age is a visibly harder segment; this is a
+failure pattern to investigate, not proof of causation.
+
+These new time-aware scores are intentionally separate from the original
+competition evidence below.
 
 ## Why R rather than SAS or MATLAB
 
@@ -93,32 +142,26 @@ tools only as resume keywords.
 
 ```text
 .
-├── .github/workflows/notebook-check.yml
-├── data/
-│   ├── raw/
-│   ├── processed/
-│   └── README.md
+├── data/                         # local raw and processed data (ignored)
 ├── notebooks/
 │   └── original_competition_solution.ipynb
 ├── sql/
-│   ├── create_tables.sql
-│   └── analysis_queries.sql
 ├── r_analysis/
-│   └── equipment_price_analysis.R
 ├── src/
 │   ├── clean_data.py
 │   ├── build_database.py
-│   └── run_sql_analysis.py
-├── app/
-├── models/
-├── reports/
-├── tests/
-├── requirements.txt
-└── README.md
+│   ├── run_sql_analysis.py
+│   ├── features.py
+│   ├── prepare_data.py
+│   ├── validation.py
+│   ├── metrics.py
+│   ├── train_classical_models.py
+│   ├── train_pytorch.py
+│   └── analyze_errors.py
+├── models/                       # generated model artifacts (ignored)
+├── reports/                      # generated reports (ignored)
+└── tests/
 ```
-
-The empty `app/` folder is reserved for the deployment milestone. The model
-folder contains only its artifact policy until training milestones begin.
 
 ## Dataset setup
 
@@ -134,7 +177,9 @@ See `data/README.md` for the schema contract. The dataset and all row-level
 derived files remain untracked because competition access does not automatically
 grant redistribution permission.
 
-## Run milestones 1-4
+## Run the complete pipeline
+
+Use Python 3.11-3.13 for the widest PyTorch wheel compatibility:
 
 ```bash
 python -m venv .venv
@@ -145,21 +190,32 @@ python -m src.clean_data
 python -m src.build_database
 python -m src.run_sql_analysis
 Rscript r_analysis/equipment_price_analysis.R
+python -m src.prepare_data
+python -m src.train_classical_models
+python -m src.train_pytorch
+python -m src.analyze_errors
 ```
 
-Expected local outputs:
+Main generated outputs:
 
 ```text
 data/processed/clean_train.csv
+data/processed/model_data.csv
 data/equipvalue.db
-reports/data_quality_report.json
-reports/sql_business_summary.csv
-reports/r_statistical_summary.csv
-reports/r_group_summary.csv
-reports/price_by_category.png
-reports/age_vs_price.png
-reports/regression_diagnostics.png
+reports/model_comparison.csv
+reports/feature_importance.csv
+reports/asset_overlap_report.csv
+reports/pytorch_metrics.json
+reports/pytorch_training_curve.png
+reports/model_error_summary.csv
+reports/error_analysis.csv
+reports/error_analysis.png
+models/lightgbm_model.txt
+models/pytorch_mlp.pt
 ```
+
+Generated rows, aggregates, and model binaries are ignored. Public code and
+tests reproduce them for an authorised dataset holder.
 
 ## Tests
 
@@ -167,10 +223,10 @@ reports/regression_diagnostics.png
 pytest -q
 ```
 
-Tests use a small synthetic fixture. This checks the code without presenting
-synthetic values as competition results. The suite covers cleaning rules,
-missing-file errors, database row counts, all six SQL analyses, and the complete
-R report contract when R is installed.
+Tests use small synthetic fixtures. They verify data cleaning, SQL/R contracts,
+row features, training-only frequency mappings, strict future-date folds,
+AssetID overlap detection, and the PyTorch architecture/save-load contract.
+Synthetic test values are never presented as competition results.
 
 ## Original competition evidence
 
@@ -185,12 +241,8 @@ The original executed competition notebook produced:
 Lower RMSLE is better. These values belong to the original executed notebook.
 The public notebook was cleaned for review and has no embedded outputs, so the
 repository does not claim that those metrics were reproduced by the new scripts.
-
-The notebook already demonstrates Ridge and Decision Tree baselines, feature
-engineering, leakage-safe training-only frequency features, LightGBM tuning,
-early stopping, and submission validation. Future milestones will move modelling
-into scripts, add time-aware cross-validation, compare a small PyTorch MLP, and
-create a tested user-facing application.
+The newer scores are higher partly because validation is deliberately harder:
+models train on earlier auctions and must predict later market periods.
 
 ## Links
 
