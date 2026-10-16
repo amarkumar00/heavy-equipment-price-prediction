@@ -2,5 +2,24 @@
 .ipynb_checkpoints/
 .venv/
 __pycache__/
-data/
+*.py[cod]
+.pytest_cache/
+.coverage
+
+# Competition data and every derived row-level artifact stay local.
+data/raw/*
+data/processed/*
+data/*.db
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/README.md
+
+# Generated reports are reproducible and may contain competition-derived data.
+reports/*.csv
+reports/*.json
+reports/*.png
+!reports/README.md
+
+models/*
+!models/README.md
 submission.csv
