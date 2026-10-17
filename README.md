@@ -3,7 +3,8 @@
 EquipValue is a student-friendly decision-support project for estimating the
 selling price of used heavy equipment from auction date, age, usage, location,
 and technical attributes. It extends an IIT Madras/Kaggle competition solution
-into a reproducible Python, SQLite, R, classical-ML, and PyTorch pipeline.
+into a reproducible Python, SQLite, R, classical-ML, PyTorch, and Streamlit
+decision-support pipeline.
 
 The original competition notebook is preserved at
 `notebooks/original_competition_solution.ipynb`. The refactor does not overwrite
@@ -96,6 +97,55 @@ predictions for equipment age, observed price band, region, category, missing
 hours, and previously seen versus unseen machines. These are descriptive failure
 patterns, not proven root causes or causal effects.
 
+### 10: business recommendation layer
+
+`src/predictor.py` turns a raw model score into an expected selling-price
+estimate, empirical error range, per-row LightGBM feature contributions,
+similar-category historical average, unfamiliar-input warnings, and a human
+inspection disclaimer. `src/build_business_context.py` derives aggregate
+category statistics and the error range from time-aware out-of-fold evidence.
+
+The output supports reserve-price planning, buyer budgeting, inventory
+valuation, and manual-review prioritization. It never makes an automatic
+purchase or sale recommendation.
+
+### 11: tested Streamlit application
+
+`app/streamlit_app.py` provides a single-equipment form, chunked CSV upload,
+feature explanations, limitations, invalid-row reporting, and downloadable
+predictions. The app has passed automated and local interactive smoke tests.
+
+**Deployment status:** tested locally, not publicly deployed. No live URL is
+claimed because the trained artifacts are derived from access-controlled data
+and remain ignored until redistribution/deployment permission is confirmed.
+
+### 12: scale-aware batch inference
+
+`src/batch_predict.py` streams CSV chunks, writes valid predictions separately
+from invalid rows, preserves row counts, and benchmarks runtime and memory.
+This is described as scale-aware local inference, not an Amazon-scale or
+distributed production system.
+
+### 13: tests and portfolio packaging
+
+The test suite covers feature schema, target leakage, unknown categories,
+invalid dates/hours, model reload, non-negative predictions, batch row counts,
+benchmark evidence, and Streamlit startup/interactive prediction.
+
+## Architecture
+
+```text
+Clean auction data ──> fold-safe features ──> LightGBM model
+        │                       │                    │
+        ├──> SQL/R evidence     └──> fitted preprocessing
+        │                                            │
+        └──> OOF errors + category aggregates ───────┤
+                                                     v
+                                           PricePredictor service
+                                              /             \
+                                     Streamlit app      Chunked CSV CLI
+```
+
 ## Verified local results
 
 The complete 138,701-row authorised training file was used. Three expanding
@@ -122,6 +172,27 @@ failure pattern to investigate, not proof of causation.
 
 These new time-aware scores are intentionally separate from the original
 competition evidence below.
+
+### Empirical range and batch benchmark
+
+The displayed price range uses the 90th percentile absolute log error from
+129,968 time-aware LightGBM out-of-fold predictions. It covered 90.0% of those
+historical OOF rows by construction; it is not a guaranteed confidence interval.
+
+The complete prediction path—including validation, model inference, per-row
+feature contributions, warnings, and result formatting—was benchmarked locally
+with 1,000-row chunks:
+
+| Requested rows | Valid predictions | Invalid rows | Runtime | Rows/second | Python peak memory |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1,000 | 1,000 | 0 | 3.2 s | 310 | 22.6 MB |
+| 10,000 | 9,480 | 520 | 35.4 s | 282 | 23.1 MB |
+| 50,000 | 45,234 | 4,766 | 183.4 s | 273 | 23.8 MB |
+
+Invalid benchmark rows contain data-quality failures such as impossible raw
+manufacture years and are reported rather than silently scored. Near-flat traced
+Python memory demonstrates bounded chunk processing on this machine; results are
+not cloud-throughput or production-scale claims.
 
 ## Why R rather than SAS or MATLAB
 
@@ -157,7 +228,14 @@ tools only as resume keywords.
 │   ├── metrics.py
 │   ├── train_classical_models.py
 │   ├── train_pytorch.py
-│   └── analyze_errors.py
+│   ├── analyze_errors.py
+│   ├── build_business_context.py
+│   ├── predictor.py
+│   └── batch_predict.py
+├── app/
+│   └── streamlit_app.py
+├── examples/
+│   └── batch_input_template.csv
 ├── models/                       # generated model artifacts (ignored)
 ├── reports/                      # generated reports (ignored)
 └── tests/
@@ -194,6 +272,19 @@ python -m src.prepare_data
 python -m src.train_classical_models
 python -m src.train_pytorch
 python -m src.analyze_errors
+python -m src.build_business_context
+python -m src.batch_predict --benchmark
+streamlit run app/streamlit_app.py
+```
+
+For a real CSV batch:
+
+```bash
+python -m src.batch_predict \
+  --input path/to/equipment.csv \
+  --output predictions/equipment_predictions.csv \
+  --invalid-output predictions/invalid_rows.csv \
+  --chunk-size 1000
 ```
 
 Main generated outputs:
@@ -210,8 +301,10 @@ reports/pytorch_training_curve.png
 reports/model_error_summary.csv
 reports/error_analysis.csv
 reports/error_analysis.png
+reports/batch_benchmark.json
 models/lightgbm_model.txt
 models/pytorch_mlp.pt
+models/business_context.json
 ```
 
 Generated rows, aggregates, and model binaries are ignored. Public code and
@@ -225,8 +318,21 @@ pytest -q
 
 Tests use small synthetic fixtures. They verify data cleaning, SQL/R contracts,
 row features, training-only frequency mappings, strict future-date folds,
-AssetID overlap detection, and the PyTorch architecture/save-load contract.
-Synthetic test values are never presented as competition results.
+AssetID overlap detection, PyTorch save/load, business recommendations,
+unfamiliar inputs, target exclusion, chunked row counts, and Streamlit startup.
+The current suite contains 22 passing tests. Synthetic test values are never
+presented as competition results.
+
+## Limitations
+
+- Training history ends in April 2013, so modern-market predictions are a major
+  distribution shift and trigger a warning.
+- The empirical range reflects past OOF errors and is not a calibrated guarantee.
+- The model cannot inspect mechanical condition, damage, title history, local
+  demand, attachments, or auction-specific negotiation.
+- LightGBM contributions explain model behaviour, not real-world causation.
+- The application is local software until a public URL and artifact-permission
+  path are both verified.
 
 ## Original competition evidence
 

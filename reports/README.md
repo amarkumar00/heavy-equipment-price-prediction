@@ -22,6 +22,7 @@ Run the milestone commands from the repository root to create:
 - `error_analysis.csv`
 - `error_analysis.png`
 - `error_analysis_notes.json`
+- `batch_benchmark.json`
 
 Generated reports are intentionally ignored because they may contain aggregated
 information derived from access-controlled competition data. The code and tests

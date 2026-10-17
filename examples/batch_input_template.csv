@@ -1,0 +1,2 @@
+TransactionID,AssetID,TransactionDate,ManufactureYear,OperationalHoursMeter,UtilizationTier,AssetScaleFactor,Spec_FullDescriptor,ProductConfigID,Spec_BaseClass,Spec_SubClass,FunctionalClassification,RegionCode,InventoryGroupCategory,CabinType,Forks,DrivetrainType,DataOriginCode,VendorPartnerID
+example-001,new-asset-001,2013-04-28,2005,4000,Medium,Large / Medium,Example equipment descriptor,3373,12,G,"Hydraulic Excavator, Track - 21.0 to 24.0 Metric Tons",Florida,TEX,EROPS,None or Unspecified,Standard,ADI149,UJF

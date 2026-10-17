@@ -15,13 +15,18 @@ data/raw/test.csv
 data/raw/sample_submission.csv
 ```
 
-Milestones 1-4 only require `train.csv`. Run:
+The complete local pipeline requires `train.csv`. Run:
 
 ```bash
 python -m src.clean_data
 python -m src.build_database
 python -m src.run_sql_analysis
 Rscript r_analysis/equipment_price_analysis.R
+python -m src.prepare_data
+python -m src.train_classical_models
+python -m src.train_pytorch
+python -m src.analyze_errors
+python -m src.build_business_context
 ```
 
 Generated files are written to `data/processed/`, `data/equipvalue.db`, and

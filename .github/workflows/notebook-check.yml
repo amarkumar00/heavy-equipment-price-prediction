@@ -21,7 +21,7 @@ jobs:
         with:
           r-version: release
       - name: Install test dependencies
-        run: python -m pip install numpy pandas scipy scikit-learn matplotlib pytest torch
+        run: python -m pip install numpy pandas scipy scikit-learn lightgbm matplotlib pytest streamlit torch
       - name: Validate notebook JSON and metadata
         run: |
           python - <<'PY'
