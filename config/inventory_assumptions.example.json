@@ -1,0 +1,8 @@
+{
+  "ordering_cost_per_cycle": 2500.0,
+  "annual_holding_rate": 0.2,
+  "lead_time_days": 30.0,
+  "service_level_z": 1.65,
+  "review_years": 3,
+  "warning": "Illustrative values only. Replace them with a real dealer's documented costs and lead time before using the output for a business decision."
+}

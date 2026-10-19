@@ -132,6 +132,36 @@ The test suite covers feature schema, target leakage, unknown categories,
 invalid dates/hours, model reload, non-negative predictions, batch row counts,
 benchmark evidence, and Streamlit startup/interactive prediction.
 
+### 14-17: decision-science extensions
+
+`src/market_forecasting.py` aggregates auction history into monthly median
+prices, holds out the latest 12 months, and compares three transparent market
+forecast baselines: last observed price, a 12-month seasonal naive model, and a
+linear log-price trend. The selected model is used only for a short historical
+scenario after the dataset end date. It is not presented as a current-market
+forecast because the authorised history ends in 2013.
+
+`r_analysis/equipment_price_analysis.R` now adds two formal hypothesis tests:
+
+- one-way ANOVA of log price across represented equipment categories, with
+  eta-squared effect size;
+- Welch's t-test of High- versus Low-utilization log price, with Cohen's d.
+
+Large samples can make tiny differences statistically significant, so the
+report includes effect sizes and never turns a p-value into a causal claim.
+
+`src/causal_sensitivity.py` uses propensity-score weighting to compare High-
+and Low-utilization equipment after balancing observed age, sale year, category,
+and region. It reports overlap, effective sample size, balance diagnostics, an
+adjusted association, assumptions, and unmeasured-confounding limitations. This
+is an observational sensitivity analysis, not proof of causation.
+
+`src/inventory_optimization.py` adds a classic EOQ and reorder-point scenario by
+equipment category. Auction transaction volume is only a market-activity proxy;
+ordering cost, holding rate, lead time, and service target come from an explicit
+user-editable assumptions file. The output is decision support, not an automatic
+purchase instruction.
+
 ## Architecture
 
 ```text
@@ -144,6 +174,11 @@ Clean auction data ──> fold-safe features ──> LightGBM model
                                            PricePredictor service
                                               /             \
                                      Streamlit app      Chunked CSV CLI
+
+Monthly aggregates ──> forecast backtest ──> historical market scenario
+R group analysis ─────> ANOVA / Welch test ─> p-values + effect sizes
+Observed confounders ─> propensity weighting -> causal sensitivity report
+Category activity + user assumptions ───────> EOQ / reorder scenario
 ```
 
 ## Verified local results
@@ -172,6 +207,32 @@ failure pattern to investigate, not proof of causation.
 
 These new time-aware scores are intentionally separate from the original
 competition evidence below.
+
+### Decision-science extension results
+
+The monthly market backtest uses 248 training months and the latest 12 months
+as validation. Seasonal-naive forecasting achieved the lowest validation RMSE
+among the three simple candidates at **4,021**, compared with **4,243** for the
+last-observed baseline and **4,220** for a linear log trend. Its MAE was not the
+best, so the report preserves all metrics instead of presenting one model as
+universally superior.
+
+The R analysis produced two formal tests. Category ANOVA returned eta-squared
+of approximately **0.053**, while the unadjusted High-versus-Low utilization
+comparison returned Cohen's d of approximately **0.916**. With more than one
+hundred thousand records, both p-values were below ordinary printed precision;
+effect sizes and assumptions are therefore essential for interpretation.
+
+The propensity-weighted utilization sensitivity analysis retained **25,360**
+High/Low rows after overlap trimming. Age imbalance fell from an absolute
+standardized difference of **0.458** to **0.094**, and sale-year imbalance fell
+from **0.066** to **0.003**. The adjusted association remains vulnerable to
+unmeasured condition, damage, seller behaviour, and local-demand variables, so
+it is not promoted as a proven causal effect.
+
+The EOQ/reorder output is reproducible with the example assumptions, but those
+numbers are illustrative. Real cost, demand, and lead-time inputs must replace
+the example before the result can support a dealer decision.
 
 ### Empirical range and batch benchmark
 
@@ -273,6 +334,9 @@ python -m src.train_classical_models
 python -m src.train_pytorch
 python -m src.analyze_errors
 python -m src.build_business_context
+python -m src.market_forecasting
+python -m src.causal_sensitivity
+python -m src.inventory_optimization
 python -m src.batch_predict --benchmark
 streamlit run app/streamlit_app.py
 ```
@@ -301,6 +365,14 @@ reports/pytorch_training_curve.png
 reports/model_error_summary.csv
 reports/error_analysis.csv
 reports/error_analysis.png
+reports/market_forecast_backtest.csv
+reports/market_forecast_metrics.json
+reports/market_forecast_backtest.png
+reports/market_forecast_future.csv
+reports/r_hypothesis_tests.csv
+reports/causal_sensitivity.json
+reports/inventory_optimization.csv
+reports/inventory_optimization.json
 reports/batch_benchmark.json
 models/lightgbm_model.txt
 models/pytorch_mlp.pt
@@ -320,8 +392,10 @@ Tests use small synthetic fixtures. They verify data cleaning, SQL/R contracts,
 row features, training-only frequency mappings, strict future-date folds,
 AssetID overlap detection, PyTorch save/load, business recommendations,
 unfamiliar inputs, target exclusion, chunked row counts, and Streamlit startup.
-The current suite contains 22 passing tests. Synthetic test values are never
-presented as competition results.
+The current local run contains 23 passing tests. PyTorch and Streamlit tests are
+dependency-gated and skip when those optional packages are unavailable in the
+active Python environment. Synthetic test values are never presented as
+competition results.
 
 ## Limitations
 
@@ -331,6 +405,12 @@ presented as competition results.
 - The model cannot inspect mechanical condition, damage, title history, local
   demand, attachments, or auction-specific negotiation.
 - LightGBM contributions explain model behaviour, not real-world causation.
+- Forecast outputs stop immediately after the 2013 dataset and are not current-
+  market guidance.
+- Causal sensitivity depends on measured-confounder and overlap assumptions;
+  unmeasured condition and market variables remain.
+- EOQ and reorder results use an auction-activity proxy plus illustrative costs,
+  not verified dealer demand or accounting inputs.
 - The application is local software until a public URL and artifact-permission
   path are both verified.
 

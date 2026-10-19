@@ -6,6 +6,7 @@ Run the milestone commands from the repository root to create:
 - `sql_business_summary.csv`
 - `r_statistical_summary.csv`
 - `r_group_summary.csv`
+- `r_hypothesis_tests.csv`
 - `price_by_category.png`
 - `age_vs_price.png`
 - `regression_diagnostics.png`
@@ -22,6 +23,13 @@ Run the milestone commands from the repository root to create:
 - `error_analysis.csv`
 - `error_analysis.png`
 - `error_analysis_notes.json`
+- `market_forecast_backtest.csv`
+- `market_forecast_metrics.json`
+- `market_forecast_backtest.png`
+- `market_forecast_future.csv`
+- `causal_sensitivity.json`
+- `inventory_optimization.csv`
+- `inventory_optimization.json`
 - `batch_benchmark.json`
 
 Generated reports are intentionally ignored because they may contain aggregated

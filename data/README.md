@@ -27,6 +27,9 @@ python -m src.train_classical_models
 python -m src.train_pytorch
 python -m src.analyze_errors
 python -m src.build_business_context
+python -m src.market_forecasting
+python -m src.causal_sensitivity
+python -m src.inventory_optimization
 ```
 
 Generated files are written to `data/processed/`, `data/equipvalue.db`, and

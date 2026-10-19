@@ -157,6 +157,120 @@ category_column <- if ("InventoryGroupDescription" %in% names(data)) {
   NA_character_
 }
 
+# Formal hypothesis tests are reported separately from descriptive summaries.
+# With a large dataset, tiny p-values are common, so each test also includes an
+# effect-size estimate and a reminder that statistical significance is not
+# proof of business importance or causation.
+hypothesis_rows <- data.frame(
+  test = character(),
+  null_hypothesis = character(),
+  p_value = numeric(),
+  p_value_display = character(),
+  effect_size_name = character(),
+  effect_size = numeric(),
+  interpretation = character(),
+  stringsAsFactors = FALSE
+)
+minimum_hypothesis_group_size <- if (nrow(data) < 1000) 2 else 30
+
+add_hypothesis <- function(
+  test, null_hypothesis, p_value, effect_size_name, effect_size, interpretation
+) {
+  hypothesis_rows <<- rbind(
+    hypothesis_rows,
+    data.frame(
+      test = test,
+      null_hypothesis = null_hypothesis,
+      p_value = p_value,
+      p_value_display = format.pval(p_value, digits = 4, eps = 2.2e-16),
+      effect_size_name = effect_size_name,
+      effect_size = effect_size,
+      interpretation = interpretation,
+      stringsAsFactors = FALSE
+    )
+  )
+}
+
+if (!is.na(category_column)) {
+  category_test_data <- data.frame(
+    LogPrice = log1p(data$TargetValue),
+    Category = as.factor(data[[category_column]])
+  )
+  category_test_data <- category_test_data[complete.cases(category_test_data), ]
+  category_counts <- table(category_test_data$Category)
+  retained_categories <- names(
+    category_counts[category_counts >= minimum_hypothesis_group_size]
+  )
+  category_test_data <- category_test_data[
+    category_test_data$Category %in% retained_categories,
+  ]
+  category_test_data$Category <- droplevels(category_test_data$Category)
+  if (
+    nrow(category_test_data) >= 2 * minimum_hypothesis_group_size &&
+      nlevels(category_test_data$Category) >= 2
+  ) {
+    category_anova <- aov(LogPrice ~ Category, data = category_test_data)
+    anova_table <- summary(category_anova)[[1]]
+    category_p_value <- anova_table[["Pr(>F)"]][1]
+    category_eta_squared <- anova_table[["Sum Sq"]][1] / sum(anova_table[["Sum Sq"]])
+    add_hypothesis(
+      "one_way_anova_log_price_by_category",
+      "Mean log selling price is equal across retained equipment categories",
+      category_p_value,
+      "eta_squared",
+      category_eta_squared,
+      "Tests category differences; effect size is more useful than p-value alone"
+    )
+  }
+}
+
+if ("UtilizationTier" %in% names(data)) {
+  utilization_test_data <- data.frame(
+    LogPrice = log1p(data$TargetValue),
+    UtilizationTier = as.character(data$UtilizationTier)
+  )
+  utilization_test_data <- utilization_test_data[
+    complete.cases(utilization_test_data) &
+      utilization_test_data$UtilizationTier %in% c("High", "Low"),
+  ]
+  high_prices <- utilization_test_data$LogPrice[
+    utilization_test_data$UtilizationTier == "High"
+  ]
+  low_prices <- utilization_test_data$LogPrice[
+    utilization_test_data$UtilizationTier == "Low"
+  ]
+  if (
+    length(high_prices) >= minimum_hypothesis_group_size &&
+      length(low_prices) >= minimum_hypothesis_group_size
+  ) {
+    utilization_test <- t.test(high_prices, low_prices, var.equal = FALSE)
+    pooled_standard_deviation <- sqrt(
+      ((length(high_prices) - 1) * var(high_prices) +
+        (length(low_prices) - 1) * var(low_prices)) /
+        (length(high_prices) + length(low_prices) - 2)
+    )
+    cohen_d <- if (pooled_standard_deviation > 0) {
+      (mean(high_prices) - mean(low_prices)) / pooled_standard_deviation
+    } else {
+      NA_real_
+    }
+    add_hypothesis(
+      "welch_t_test_high_vs_low_utilization_log_price",
+      "High- and Low-utilization equipment have equal mean log selling price",
+      utilization_test$p.value,
+      "cohen_d",
+      cohen_d,
+      "Unadjusted group comparison; confounding can explain part of the difference"
+    )
+  }
+}
+
+write.csv(
+  hypothesis_rows,
+  file.path(arguments$output_dir, "r_hypothesis_tests.csv"),
+  row.names = FALSE
+)
+
 png(file.path(arguments$output_dir, "price_by_category.png"), width = 1200, height = 750, res = 120)
 if (!is.na(category_column)) {
   category <- as.character(data[[category_column]])
@@ -240,4 +354,5 @@ if (nrow(model_data) >= 8 && length(unique(model_data$TargetValue)) >= 3) {
 dev.off()
 
 cat("R analysis complete:", arguments$output_dir, "\n")
+cat("Formal hypothesis tests:", nrow(hypothesis_rows), "\n")
 cat("Reminder: association does not establish causation.\n")

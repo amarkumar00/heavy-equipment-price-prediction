@@ -77,8 +77,24 @@ def test_r_analysis_produces_expected_reports(tmp_path: Path) -> None:
     expected = {
         "r_statistical_summary.csv",
         "r_group_summary.csv",
+        "r_hypothesis_tests.csv",
         "price_by_category.png",
         "age_vs_price.png",
         "regression_diagnostics.png",
     }
     assert expected.issubset({path.name for path in output_dir.iterdir()})
+
+    hypothesis_tests = pd.read_csv(output_dir / "r_hypothesis_tests.csv")
+    assert {
+        "test",
+        "null_hypothesis",
+        "p_value",
+        "p_value_display",
+        "effect_size_name",
+        "effect_size",
+        "interpretation",
+    }.issubset(hypothesis_tests.columns)
+    assert {
+        "one_way_anova_log_price_by_category",
+        "welch_t_test_high_vs_low_utilization_log_price",
+    }.issubset(set(hypothesis_tests["test"]))
